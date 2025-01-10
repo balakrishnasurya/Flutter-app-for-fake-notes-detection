@@ -1,8 +1,8 @@
 from torch import optim
 import torch.nn as nn
 import torchvision
-import preprocessing as pp
-import train
+import temp.preprocessing as pp
+import temp.train as train
 import torch
 import numpy as np
 

@@ -28,6 +28,8 @@ class CurrencyDetectionScreen extends StatefulWidget {
   _CurrencyDetectionScreenState createState() => _CurrencyDetectionScreenState();
 }
 
+const String flaskServerUrl = 'http://127.0.0.1:5000';
+
 class _CurrencyDetectionScreenState extends State<CurrencyDetectionScreen> {
   String _result = "Upload an image for detection";
   bool _isUploading = false;
@@ -37,14 +39,14 @@ class _CurrencyDetectionScreenState extends State<CurrencyDetectionScreen> {
       _isUploading = true;
     });
 
-    final String url = 'http://127.0.0.1:5000/'; // Flask server URL
+    final Uri uri = Uri.parse('$flaskServerUrl/api/predict');
 
     try {
-      var request = http.MultipartRequest('POST', Uri.parse(url));
+      var request = http.MultipartRequest('POST', uri);
       final stream = imageFile.openRead();
       final String filename = imageFile.path.split('/').last;
       final multipartFile = http.MultipartFile(
-        'my_uploaded_file',
+        'image',
         stream,
         await imageFile.length(),
         filename: filename,
@@ -56,8 +58,19 @@ class _CurrencyDetectionScreenState extends State<CurrencyDetectionScreen> {
 
       if (response.statusCode == 200) {
         final data = json.decode(responseBody);
+        String message = data['message'] ?? 'No message';
+        String authenticity = data['authenticity']['prediction'] ?? 'Unknown';
+        double authConfidence = data['authenticity']['confidence'] ?? 0.0;
+        String denomination = data['denomination']['prediction'] ?? 'Unknown';
+        double denominationConfidence = data['denomination']['confidence'] ?? 0.0;
+        String edgeImageBase64 = data['edge_image'] ?? '';
+        Uint8List? edgeImageBytes;
+        if (edgeImageBase64.isNotEmpty) {
+          edgeImageBytes = base64Decode(edgeImageBase64);
+        }
+
         setState(() {
-          _result = "Result: ${data['result']}\nVariance: ${data['variance']}\nSkew: ${data['skew']}\nKurtosis: ${data['kurtosis']}\nEntropy: ${data['entropy']}";
+          _result = "$message\nAuthenticity: $authenticity (${(authConfidence * 100).toStringAsFixed(2)}%)\nDenomination: $denomination (${(denominationConfidence * 100).toStringAsFixed(2)}%)";
         });
       } else {
         setState(() {
@@ -104,6 +117,9 @@ class _CurrencyDetectionScreenState extends State<CurrencyDetectionScreen> {
                   ),
             SizedBox(height: 20),
             Text(_result, textAlign: TextAlign.center),
+            SizedBox(height: 20),
+            if (edgeImageBase64.isNotEmpty)
+              Image.memory(base64Decode(edgeImageBase64)),
           ],
         ),
       ),
