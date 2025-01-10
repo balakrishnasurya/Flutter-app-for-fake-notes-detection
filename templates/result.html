@@ -1,0 +1,34 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Currency Authentication Result</title>
+</head>
+<body>
+    <h1>Currency Authentication Result</h1>
+
+    <h2>Original Image:</h2>
+    <div id="original-image-container">
+        {{ original_image|safe }}
+    </div>
+
+    <h2>Edge Image:</h2>
+    <div id="edge-image-container">
+        {{ edge_image|safe }}
+    </div>
+
+    <h2>Features:</h2>
+    <ul>
+        <li>Variance: {{ variance }}</li>
+        <li>Skew: {{ skew }}</li>
+        <li>Kurtosis: {{ kurtosis }}</li>
+        <li>Entropy: {{ entropy }}</li>
+    </ul>
+
+    <h2>Prediction:</h2>
+    <p>The currency is: {{ result }}</p>
+
+</body>
+</html>
