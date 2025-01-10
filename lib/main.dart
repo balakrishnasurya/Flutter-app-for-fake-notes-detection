@@ -33,6 +33,7 @@ const String flaskServerUrl = 'http://127.0.0.1:5000';
 class _CurrencyDetectionScreenState extends State<CurrencyDetectionScreen> {
   String _result = "Upload an image for detection";
   bool _isUploading = false;
+  String edgeimageBase64 = '';
 
   Future<void> _uploadImage(io.File imageFile) async {
     setState(() {
@@ -63,14 +64,10 @@ class _CurrencyDetectionScreenState extends State<CurrencyDetectionScreen> {
         double authConfidence = data['authenticity']['confidence'] ?? 0.0;
         String denomination = data['denomination']['prediction'] ?? 'Unknown';
         double denominationConfidence = data['denomination']['confidence'] ?? 0.0;
-        String edgeImageBase64 = data['edge_image'] ?? '';
-        Uint8List? edgeImageBytes;
-        if (edgeImageBase64.isNotEmpty) {
-          edgeImageBytes = base64Decode(edgeImageBase64);
-        }
 
         setState(() {
           _result = "$message\nAuthenticity: $authenticity (${(authConfidence * 100).toStringAsFixed(2)}%)\nDenomination: $denomination (${(denominationConfidence * 100).toStringAsFixed(2)}%)";
+          edgeimageBase64 = data['edge_image'] ?? '';
         });
       } else {
         setState(() {
@@ -118,8 +115,8 @@ class _CurrencyDetectionScreenState extends State<CurrencyDetectionScreen> {
             SizedBox(height: 20),
             Text(_result, textAlign: TextAlign.center),
             SizedBox(height: 20),
-            if (edgeImageBase64.isNotEmpty)
-              Image.memory(base64Decode(edgeImageBase64)),
+            if (edgeimageBase64.isNotEmpty)
+              Image.memory(base64Decode(edgeimageBase64)),
           ],
         ),
       ),
