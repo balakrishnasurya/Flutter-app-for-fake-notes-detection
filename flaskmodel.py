@@ -94,7 +94,8 @@ def predict():
     try:
         if 'image' not in request.files:
             return jsonify({
-                'error': 'No image file provided'
+                'success': False,
+                'message': 'No image file provided'
             }), 400
 
         uploaded_file = request.files['image']
@@ -147,20 +148,10 @@ def predict():
 
         result = {
             "success": True,
-            "authenticity_features": {
-                "entropy": float(ent),
-                "kurtosis": float(kur),
-                "skew": float(sk),
-                "variance": float(var)
-            },
-            "authenticity": {
-                "prediction": authenticity,
-                "confidence": auth_confidence
-            },
-            "denomination": {
-                "prediction": predicted_class,
-                "confidence": denomination_confidence
-            },
+            "authenticity_prediction": authenticity,
+            "authenticity_confidence": auth_confidence,
+            "denomination_prediction": predicted_class,
+            "denomination_confidence": denomination_confidence,
             "edge_image": edge_image_base64,
             "message": f"Currency appears to be {authenticity.lower()} {predicted_class} with {auth_confidence:.2%} authenticity confidence"
         }
@@ -169,9 +160,8 @@ def predict():
 
     except Exception as e:
         return jsonify({
-            "success": False,
-            "error": str(e),
-            "message": "Failed to process image"
+            'success': False,
+            'message': f'Error processing image: {str(e)}'
         }), 500
 
 # Add CORS support
@@ -179,8 +169,8 @@ def predict():
 def after_request(response):
     response.headers.add('Access-Control-Allow-Origin', '*')
     response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
     return response
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000) 
+    app.run(debug=True, host="0.0.0.0", port=5000)

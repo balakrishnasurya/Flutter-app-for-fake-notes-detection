@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'dart:typed_data';
-import 'dart:io' as io;
 import 'package:image_picker/image_picker.dart';
+import 'dart:io' as io;
+
+const String flaskServerUrl = 'http://127.0.0.1:5000';
 
 void main() {
-  runApp(MyApp());
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -18,65 +21,78 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.blue,
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-      home: CurrencyDetectionScreen(),
+      home: const CurrencyDetectionScreen(),
     );
   }
 }
 
 class CurrencyDetectionScreen extends StatefulWidget {
-  @override
-  _CurrencyDetectionScreenState createState() => _CurrencyDetectionScreenState();
-}
+  const CurrencyDetectionScreen({super.key});
 
-const String flaskServerUrl = 'http://127.0.0.1:5000';
+  @override
+  State<CurrencyDetectionScreen> createState() => _CurrencyDetectionScreenState();
+}
 
 class _CurrencyDetectionScreenState extends State<CurrencyDetectionScreen> {
   String _result = "Upload an image for detection";
   bool _isUploading = false;
-  String edgeimageBase64 = '';
+  String _edgeImageBase64 = '';
+  final ImagePicker _picker = ImagePicker();
+
+  Future<void> _pickAndUploadImage() async {
+    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+    if (image != null) {
+      await _uploadImage(io.File(image.path));
+    }
+  }
 
   Future<void> _uploadImage(io.File imageFile) async {
     setState(() {
       _isUploading = true;
+      _result = "Processing image...";
     });
 
-    final Uri uri = Uri.parse('$flaskServerUrl/api/predict');
-
     try {
-      var request = http.MultipartRequest('POST', uri);
-      final stream = imageFile.openRead();
-      final String filename = imageFile.path.split('/').last;
-      final multipartFile = http.MultipartFile(
-        'image',
-        stream,
-        await imageFile.length(),
-        filename: filename,
+      var request = http.MultipartRequest('POST', Uri.parse('$flaskServerUrl/api/predict'));
+      var stream = http.ByteStream(imageFile.openRead());
+      var length = await imageFile.length();
+      
+      request.files.add(
+        http.MultipartFile(
+          'image',
+          stream,
+          length,
+          filename: 'image.jpg',
+        ),
       );
-      request.files.add(multipartFile);
 
-      var response = await request.send();
-      var responseBody = await response.stream.bytesToString();
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200) {
-        final data = json.decode(responseBody);
-        String message = data['message'] ?? 'No message';
-        String authenticity = data['authenticity']['prediction'] ?? 'Unknown';
-        double authConfidence = data['authenticity']['confidence'] ?? 0.0;
-        String denomination = data['denomination']['prediction'] ?? 'Unknown';
-        double denominationConfidence = data['denomination']['confidence'] ?? 0.0;
-
-        setState(() {
-          _result = "$message\nAuthenticity: $authenticity (${(authConfidence * 100).toStringAsFixed(2)}%)\nDenomination: $denomination (${(denominationConfidence * 100).toStringAsFixed(2)}%)";
-          edgeimageBase64 = data['edge_image'] ?? '';
-        });
+        var jsonResponse = json.decode(response.body);
+        if (jsonResponse['success'] == true) {
+          setState(() {
+            _result = '''
+Authenticity: ${jsonResponse['authenticity']['prediction']}
+Confidence: ${(jsonResponse['authenticity']['confidence'] * 100).toStringAsFixed(2)}%
+Denomination: ${jsonResponse['denomination']['prediction']}
+''';
+            _edgeImageBase64 = jsonResponse['edge_image'];
+          });
+        } else {
+          setState(() {
+            _result = "Error: ${jsonResponse['message']}";
+          });
+        }
       } else {
         setState(() {
-          _result = "Failed to upload image. Status code: ${response.statusCode}";
+          _result = "Error: Server returned ${response.statusCode}";
         });
       }
     } catch (e) {
       setState(() {
-        _result = "Error: $e";
+        _result = "Error: Failed to connect to server - $e";
       });
     } finally {
       setState(() {
@@ -85,38 +101,30 @@ class _CurrencyDetectionScreenState extends State<CurrencyDetectionScreen> {
     }
   }
 
-  Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-
-    if (pickedFile != null) {
-      print("Picked image path: ${pickedFile.path}");
-      io.File imageFile = io.File(pickedFile.path);
-      _uploadImage(imageFile);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("Currency Detection"),
+        title: const Text('Currency Detection'),
       ),
-      body: Center(
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _isUploading
-                ? CircularProgressIndicator()
-                : ElevatedButton(
-                    onPressed: _pickImage,
-                    child: Text("Pick Image for Detection"),
-                  ),
-            SizedBox(height: 20),
-            Text(_result, textAlign: TextAlign.center),
-            SizedBox(height: 20),
-            if (edgeimageBase64.isNotEmpty)
-              Image.memory(base64Decode(edgeimageBase64)),
+            if (_isUploading)
+              const Center(child: CircularProgressIndicator())
+            else
+              ElevatedButton(
+                onPressed: _pickAndUploadImage,
+                child: const Text('Select Image'),
+              ),
+            const SizedBox(height: 20),
+            Text(_result),
+            if (_edgeImageBase64.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              Image.memory(base64Decode(_edgeImageBase64)),
+            ],
           ],
         ),
       ),
