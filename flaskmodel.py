@@ -13,6 +13,7 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
+import os
 
 app = Flask(__name__)
 
@@ -33,7 +34,7 @@ x_train = scaler.fit_transform(x_train)
 x_test = scaler.transform(x_test)
 
 # Initialize and train the classifier
-clf = LogisticRegression(solver='lbfgs', random_state=42, multi_class='auto')
+clf = LogisticRegression(solver='lbfgs', random_state=42)
 clf.fit(x_train, y_train.values.ravel())
 
 # Define class names
@@ -51,36 +52,43 @@ transform = transforms.Compose([
 ])
 
 def load_model():
-    # Define the model structure
-    model = models.resnet18(pretrained=False)
-    num_ftrs = model.fc.in_features
-    model.fc = nn.Sequential(
-        nn.Linear(num_ftrs, 512),
-        nn.ReLU(),
-        nn.Dropout(0.25),
-        nn.Linear(512, 256),
-        nn.ReLU(),
-        nn.Dropout(0.5),
-        nn.Linear(256, 128),
-        nn.ReLU(),
-        nn.Dropout(0.5),
-        nn.Linear(128, 64),
-        nn.ReLU(),
-        nn.Linear(64, 7)  # Assuming 7 classes, modify if needed
-    )
-    
     try:
-        state_dict = torch.load(MODEL_PATH, map_location=device)
+        model = models.resnet18(weights=None)
+        num_ftrs = model.fc.in_features
+        model.fc = nn.Sequential(
+            nn.Linear(num_ftrs, 512),
+            nn.ReLU(),
+            nn.Dropout(0.25),
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(128, 64),
+            nn.ReLU(),
+            nn.Linear(64, 7)  # Assuming 7 classes, modify if needed
+        )
+        
+        if not os.path.exists(MODEL_PATH):
+            print(f"Model file {MODEL_PATH} not found.")
+            return None
+            
+        state_dict = torch.load(MODEL_PATH, map_location=device, weights_only=True)
         model.load_state_dict(state_dict)
         model.eval()
         return model
-    except FileNotFoundError:
-        print(f"Model file {MODEL_PATH} not found.")
+    except Exception as e:
+        print(f"Error loading model: {str(e)}")
         return None
 
 # Load model at startup
 model = load_model()
 model.to(device)
+
+# After model loading
+if model is None:
+    raise RuntimeError("Failed to load the model. Application cannot start.")
 
 @app.route("/", methods=["GET"])
 def home():
@@ -94,8 +102,7 @@ def predict():
     try:
         if 'image' not in request.files:
             return jsonify({
-                'success': False,
-                'message': 'No image file provided'
+                'error': 'No image file provided'
             }), 400
 
         uploaded_file = request.files['image']
@@ -148,10 +155,20 @@ def predict():
 
         result = {
             "success": True,
-            "authenticity_prediction": authenticity,
-            "authenticity_confidence": auth_confidence,
-            "denomination_prediction": predicted_class,
-            "denomination_confidence": denomination_confidence,
+            "authenticity_features": {
+                "entropy": float(ent),
+                "kurtosis": float(kur),
+                "skew": float(sk),
+                "variance": float(var)
+            },
+            "authenticity": {
+                "prediction": authenticity,
+                "confidence": auth_confidence
+            },
+            "denomination": {
+                "prediction": predicted_class,
+                "confidence": denomination_confidence
+            },
             "edge_image": edge_image_base64,
             "message": f"Currency appears to be {authenticity.lower()} {predicted_class} with {auth_confidence:.2%} authenticity confidence"
         }
@@ -160,17 +177,26 @@ def predict():
 
     except Exception as e:
         return jsonify({
-            'success': False,
-            'message': f'Error processing image: {str(e)}'
+            "success": False,
+            "error": str(e),
+            "message": "Failed to process image"
         }), 500
+
+@app.route("/health", methods=["GET"])
+def health_check():
+    return jsonify({
+        "status": "healthy",
+        "model_loaded": model is not None
+    })
 
 # Add CORS support
 @app.after_request
 def after_request(response):
     response.headers.add('Access-Control-Allow-Origin', '*')
     response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE')
     return response
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port) 

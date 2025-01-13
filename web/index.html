@@ -31,8 +31,19 @@
 
   <title>flutter_application_1</title>
   <link rel="manifest" href="manifest.json">
+
+  <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
+  <meta http-equiv="Access-Control-Allow-Origin" content="*">
+  <meta http-equiv="Access-Control-Allow-Methods" content="GET,POST,PUT,PATCH,DELETE">
+  <meta http-equiv="Access-Control-Allow-Headers" content="Origin, X-Requested-With, Content-Type, Accept">
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>
+  <script>
+    if (window.location.protocol === 'https:') {
+      window.flutterWebRenderer = "html";
+    }
+  </script>
+  <script src="main.dart.js" type="application/javascript"></script>
 </body>
 </html>
