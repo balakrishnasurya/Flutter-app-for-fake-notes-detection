@@ -41,6 +41,7 @@ class _CurrencyDetectionScreenState extends State<CurrencyDetectionScreen> {
   String _result = "Upload an image for detection";
   bool _isUploading = false;
   String _edgeImageBase64 = '';
+  String _originalImageBase64 = '';
   final ImagePicker _picker = ImagePicker();
 
   Future<void> _pickAndUploadImage() async {
@@ -58,14 +59,15 @@ class _CurrencyDetectionScreenState extends State<CurrencyDetectionScreen> {
         try {
           await input.onChange.first;
           if (input.files!.isNotEmpty) {
-            print('File selected: ${input.files![0].name}');
-
             final reader = html.FileReader();
-            reader.readAsArrayBuffer(input.files![0]);
-            await reader.onLoad.first;
+            reader.readAsDataUrl(input.files![0]);
+            final dataUrl = await reader.onLoad.first;
+            final originalBase64 = (reader.result as String).split(',')[1];
 
-            print('File read successfully');
-            final bytes = reader.result as List<int>;
+            final arrayReader = html.FileReader();
+            arrayReader.readAsArrayBuffer(input.files![0]);
+            await arrayReader.onLoad.first;
+            final bytes = arrayReader.result as List<int>;
 
             var uri = Uri.parse('$flaskServerUrl/api/predict');
             var request = http.MultipartRequest('POST', uri);
@@ -75,16 +77,11 @@ class _CurrencyDetectionScreenState extends State<CurrencyDetectionScreen> {
 
             request.files.add(multipartFile);
 
-            print('Sending request to: $uri');
             var streamedResponse = await request.send();
             var response = await http.Response.fromStream(streamedResponse);
 
-            print('Response status: ${response.statusCode}');
-            print('Response body: ${response.body}');
-
             if (response.statusCode == 200) {
               var jsonResponse = json.decode(response.body);
-              print('JSON Response: $jsonResponse');
 
               if (jsonResponse['success'] == true) {
                 setState(() {
@@ -95,6 +92,7 @@ Denomination: ${jsonResponse['denomination']['prediction']}
 Denomination Confidence: ${(jsonResponse['denomination']['confidence'] * 100).toStringAsFixed(2)}%
 Message: ${jsonResponse['message']}
 ''';
+                  _originalImageBase64 = originalBase64;
                   if (jsonResponse['edge_image'] != null) {
                     _edgeImageBase64 = jsonResponse['edge_image'];
                   }
@@ -217,8 +215,16 @@ Denomination: ${jsonResponse['denomination_prediction']}
               ),
             const SizedBox(height: 20),
             SelectableText(_result),
+            if (_originalImageBase64.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              const Text('Original Image:',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              Image.memory(base64Decode(_originalImageBase64)),
+            ],
             if (_edgeImageBase64.isNotEmpty) ...[
               const SizedBox(height: 20),
+              const Text('Edge Detection:',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
               Image.memory(base64Decode(_edgeImageBase64)),
             ],
           ],
