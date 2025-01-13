@@ -184,14 +184,6 @@ Denomination Confidence: ${(jsonResponse['denomination']['confidence'] * 100).to
                   style: TextStyle(fontWeight: FontWeight.bold)),
               Image.memory(_selectedImageBytes!),
             ],
-
-            // Edge detection image
-            if (_edgeImageBase64.isNotEmpty) ...[
-              const SizedBox(height: 20),
-              const Text('Edge Detection:',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
-              Image.memory(base64Decode(_edgeImageBase64)),
-            ],
           ],
         ),
       ),
