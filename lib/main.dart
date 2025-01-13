@@ -6,6 +6,7 @@ import 'dart:io' as io;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:universal_html/html.dart' as html;
 import 'package:http_parser/http_parser.dart';
+import 'dart:typed_data';
 
 const String flaskServerUrl = 'https://goldfish-app-ils97.ondigitalocean.app';
 
@@ -38,155 +39,87 @@ class CurrencyDetectionScreen extends StatefulWidget {
 }
 
 class _CurrencyDetectionScreenState extends State<CurrencyDetectionScreen> {
-  String _result = "Upload an image for detection";
+  String _result = "Select or capture an image for detection";
   bool _isUploading = false;
   String _edgeImageBase64 = '';
   String _originalImageBase64 = '';
   final ImagePicker _picker = ImagePicker();
+  Uint8List? _selectedImageBytes; // To store the selected/captured image
+  bool _imageSelected = false; // To track if an image is selected/captured
 
-  Future<void> _pickAndUploadImage() async {
-    setState(() {
-      _isUploading = true;
-      _result = "Processing image...";
-    });
-
+  Future<void> _pickImage(ImageSource source) async {
     try {
-      if (kIsWeb) {
-        final html.FileUploadInputElement input = html.FileUploadInputElement()
-          ..accept = 'image/*';
-        input.click();
-
-        try {
-          await input.onChange.first;
-          if (input.files!.isNotEmpty) {
-            final reader = html.FileReader();
-            reader.readAsDataUrl(input.files![0]);
-            final dataUrl = await reader.onLoad.first;
-            final originalBase64 = (reader.result as String).split(',')[1];
-
-            final arrayReader = html.FileReader();
-            arrayReader.readAsArrayBuffer(input.files![0]);
-            await arrayReader.onLoad.first;
-            final bytes = arrayReader.result as List<int>;
-
-            var uri = Uri.parse('$flaskServerUrl/api/predict');
-            var request = http.MultipartRequest('POST', uri);
-
-            var multipartFile = http.MultipartFile.fromBytes('image', bytes,
-                filename: 'image.jpg', contentType: MediaType('image', 'jpeg'));
-
-            request.files.add(multipartFile);
-
-            var streamedResponse = await request.send();
-            var response = await http.Response.fromStream(streamedResponse);
-
-            if (response.statusCode == 200) {
-              var jsonResponse = json.decode(response.body);
-
-              if (jsonResponse['success'] == true) {
-                setState(() {
-                  _result = '''
-Authenticity: ${jsonResponse['authenticity']['prediction']}
-Confidence: ${(jsonResponse['authenticity']['confidence'] * 100).toStringAsFixed(2)}%
-Denomination: ${jsonResponse['denomination']['prediction']}
-Denomination Confidence: ${(jsonResponse['denomination']['confidence'] * 100).toStringAsFixed(2)}%
-Message: ${jsonResponse['message']}
-''';
-                  _originalImageBase64 = originalBase64;
-                  if (jsonResponse['edge_image'] != null) {
-                    _edgeImageBase64 = jsonResponse['edge_image'];
-                  }
-                });
-              } else {
-                setState(() {
-                  _result =
-                      "Error: ${jsonResponse['message'] ?? 'Unknown error'}";
-                });
-              }
-            } else {
-              setState(() {
-                _result =
-                    "Error: Server returned ${response.statusCode}\nResponse: ${response.body}";
-              });
-            }
-          }
-        } catch (e, stackTrace) {
-          print('Error during file processing: $e');
-          print('Stack trace: $stackTrace');
-          setState(() {
-            _result = "Error processing file: $e";
-          });
-        }
-      } else {
-        // Mobile image picking
-        final XFile? image =
-            await _picker.pickImage(source: ImageSource.gallery);
-        if (image != null) {
-          await _uploadImage(io.File(image.path));
-        }
+      final XFile? image = await _picker.pickImage(source: source);
+      if (image != null) {
+        final bytes = await image.readAsBytes();
+        setState(() {
+          _selectedImageBytes = bytes;
+          _imageSelected = true;
+          _result = "Image selected. Click Process to analyze.";
+          _originalImageBase64 = base64Encode(bytes);
+          _edgeImageBase64 = ''; // Clear previous edge image
+        });
       }
-    } catch (e, stackTrace) {
-      print('Error in _pickAndUploadImage: $e');
-      print('Stack trace: $stackTrace');
+    } catch (e) {
       setState(() {
-        _result = "Error: Failed to process image - $e";
-      });
-    } finally {
-      setState(() {
-        _isUploading = false;
+        _result = "Error selecting image: $e";
       });
     }
   }
 
-  Future<void> _uploadImage(io.File imageFile) async {
+  Future<void> _processImage() async {
+    if (!_imageSelected) {
+      setState(() {
+        _result = "Please select or capture an image first";
+      });
+      return;
+    }
+
     setState(() {
       _isUploading = true;
       _result = "Processing image...";
     });
 
     try {
-      var request = http.MultipartRequest(
-          'POST', Uri.parse('$flaskServerUrl/api/predict'));
-      var stream = http.ByteStream(imageFile.openRead());
-      var length = await imageFile.length();
+      var uri = Uri.parse('$flaskServerUrl/api/predict');
+      var request = http.MultipartRequest('POST', uri);
 
-      request.files.add(
-        http.MultipartFile(
-          'image',
-          stream,
-          length,
-          filename: 'image.jpg',
-        ),
-      );
+      request.files.add(http.MultipartFile.fromBytes(
+          'image', _selectedImageBytes!,
+          filename: 'image.jpg', contentType: MediaType('image', 'jpeg')));
 
       var streamedResponse = await request.send();
       var response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200) {
         var jsonResponse = json.decode(response.body);
+
         if (jsonResponse['success'] == true) {
           setState(() {
             _result = '''
-Authenticity: ${jsonResponse['authenticity_prediction']}
-Confidence: ${(jsonResponse['authenticity_confidence'] * 100).toStringAsFixed(2)}%
-Denomination: ${jsonResponse['denomination_prediction']}
+Authenticity: ${jsonResponse['authenticity']['prediction']}
+Confidence: ${(jsonResponse['authenticity']['confidence'] * 100).toStringAsFixed(2)}%
+Denomination: ${jsonResponse['denomination']['prediction']}
+Denomination Confidence: ${(jsonResponse['denomination']['confidence'] * 100).toStringAsFixed(2)}%
 ''';
-            _edgeImageBase64 = jsonResponse['edge_image'];
+            if (jsonResponse['edge_image'] != null) {
+              _edgeImageBase64 = jsonResponse['edge_image'];
+            }
           });
         } else {
           setState(() {
-            _result = "Error: ${jsonResponse['message']}";
+            _result = "Error: ${jsonResponse['message'] ?? 'Unknown error'}";
           });
         }
       } else {
         setState(() {
-          _result = "Error: Server returned ${response.statusCode}";
+          _result =
+              "Error: Server returned ${response.statusCode}\nResponse: ${response.body}";
         });
       }
     } catch (e) {
-      print('Error details: $e');
       setState(() {
-        _result = "Error: Failed to connect to server - $e";
+        _result = "Error processing image: $e";
       });
     } finally {
       setState(() {
@@ -206,21 +139,53 @@ Denomination: ${jsonResponse['denomination_prediction']}
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Image source buttons row
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _isUploading
+                      ? null
+                      : () => _pickImage(ImageSource.gallery),
+                  icon: const Icon(Icons.photo_library),
+                  label: const Text('Gallery'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: _isUploading
+                      ? null
+                      : () => _pickImage(ImageSource.camera),
+                  icon: const Icon(Icons.camera_alt),
+                  label: const Text('Camera'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // Process button
+            if (_imageSelected)
+              ElevatedButton.icon(
+                onPressed: _isUploading ? null : _processImage,
+                icon: const Icon(Icons.analytics),
+                label: const Text('Process Image'),
+              ),
+
+            const SizedBox(height: 20),
+
+            // Loading indicator or result
             if (_isUploading)
               const Center(child: CircularProgressIndicator())
             else
-              ElevatedButton(
-                onPressed: _pickAndUploadImage,
-                child: const Text('Select Image'),
-              ),
-            const SizedBox(height: 20),
-            SelectableText(_result),
-            if (_originalImageBase64.isNotEmpty) ...[
+              SelectableText(_result),
+
+            // Selected/Captured image
+            if (_selectedImageBytes != null) ...[
               const SizedBox(height: 20),
-              const Text('Original Image:',
+              const Text('Selected Image:',
                   style: TextStyle(fontWeight: FontWeight.bold)),
-              Image.memory(base64Decode(_originalImageBase64)),
+              Image.memory(_selectedImageBytes!),
             ],
+
+            // Edge detection image
             if (_edgeImageBase64.isNotEmpty) ...[
               const SizedBox(height: 20),
               const Text('Edge Detection:',
