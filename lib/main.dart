@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io' as io;
 
-const String flaskServerUrl = 'http://127.0.0.1:5000';
+const String flaskServerUrl = 'https://goldfish-app-ils97.ondigitalocean.app/';
 
 void main() {
   runApp(const MyApp());
@@ -30,7 +30,8 @@ class CurrencyDetectionScreen extends StatefulWidget {
   const CurrencyDetectionScreen({super.key});
 
   @override
-  State<CurrencyDetectionScreen> createState() => _CurrencyDetectionScreenState();
+  State<CurrencyDetectionScreen> createState() =>
+      _CurrencyDetectionScreenState();
 }
 
 class _CurrencyDetectionScreenState extends State<CurrencyDetectionScreen> {
@@ -53,10 +54,11 @@ class _CurrencyDetectionScreenState extends State<CurrencyDetectionScreen> {
     });
 
     try {
-      var request = http.MultipartRequest('POST', Uri.parse('$flaskServerUrl/api/predict'));
+      var request = http.MultipartRequest(
+          'POST', Uri.parse('$flaskServerUrl/api/predict'));
       var stream = http.ByteStream(imageFile.openRead());
       var length = await imageFile.length();
-      
+
       request.files.add(
         http.MultipartFile(
           'image',
@@ -91,6 +93,7 @@ Denomination: ${jsonResponse['denomination']['prediction']}
         });
       }
     } catch (e) {
+      print('Error details: $e');
       setState(() {
         _result = "Error: Failed to connect to server - $e";
       });
