@@ -67,22 +67,10 @@ class _CurrencyDetectionScreenState extends State<CurrencyDetectionScreen> {
 
   Future<void> _pickImage(ImageSource source) async {
     try {
-      // Request camera permission if needed
-      if (source == ImageSource.camera) {
-        if (kIsWeb) {
-          // Web-specific camera handling
-          final html.MediaStream stream = await html
-              .window.navigator.mediaDevices!
-              .getUserMedia({'video': true});
-          // Handle stream
-          stream.getTracks().forEach((track) => track.stop());
-        }
-      }
-
       final XFile? image = await _picker.pickImage(
         source: source,
-        imageQuality: 85, // Optimize image size
-        maxWidth: 1920, // Limit max dimensions
+        imageQuality: 85,
+        maxWidth: 1920,
         maxHeight: 1080,
       );
 
@@ -95,11 +83,11 @@ class _CurrencyDetectionScreenState extends State<CurrencyDetectionScreen> {
           _originalImageBase64 = base64Encode(bytes);
         });
       }
-    } on PlatformException catch (e) {
-      _handlePlatformChannelError(e);
     } catch (e) {
+      print('Error picking image: $e');
       setState(() {
-        _result = "Error: $e";
+        _result =
+            "Error accessing ${source == ImageSource.camera ? 'camera' : 'gallery'}: $e";
       });
     }
   }
@@ -176,7 +164,6 @@ Denomination Confidence: ${(jsonResponse['denomination']['confidence'] * 100).to
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Image source buttons row
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
@@ -196,29 +183,21 @@ Denomination Confidence: ${(jsonResponse['denomination']['confidence'] * 100).to
                 ),
               ],
             ),
-            const SizedBox(height: 20),
-
-            // Process button
-            if (_imageSelected)
+            if (_imageSelected) ...[
+              const SizedBox(height: 20),
               ElevatedButton.icon(
                 onPressed: _isUploading ? null : _processImage,
                 icon: const Icon(Icons.analytics),
                 label: const Text('Process Image'),
               ),
-
+            ],
             const SizedBox(height: 20),
-
-            // Loading indicator or result
             if (_isUploading)
               const Center(child: CircularProgressIndicator())
             else
               SelectableText(_result),
-
-            // Selected/Captured image
             if (_selectedImageBytes != null) ...[
               const SizedBox(height: 20),
-              const Text('Selected Image:',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
               Image.memory(_selectedImageBytes!),
             ],
           ],
