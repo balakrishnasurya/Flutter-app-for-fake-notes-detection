@@ -4,10 +4,8 @@ import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io' as io;
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:universal_html/html.dart' as html;
 import 'package:http_parser/http_parser.dart';
 import 'dart:typed_data';
-import 'package:flutter/services.dart';
 
 const String flaskServerUrl = 'https://goldfish-app-ils97.ondigitalocean.app';
 
@@ -42,28 +40,9 @@ class CurrencyDetectionScreen extends StatefulWidget {
 class _CurrencyDetectionScreenState extends State<CurrencyDetectionScreen> {
   String _result = "Select or capture an image for detection";
   bool _isUploading = false;
-  String _edgeImageBase64 = '';
-  String _originalImageBase64 = '';
+  Uint8List? _selectedImageBytes;
+  bool _imageSelected = false;
   final ImagePicker _picker = ImagePicker();
-  Uint8List? _selectedImageBytes; // To store the selected/captured image
-  bool _imageSelected = false; // To track if an image is selected/captured
-
-  void _handlePlatformChannelError(PlatformException error) {
-    String message = 'Error: ';
-    switch (error.code) {
-      case 'camera_access_denied':
-        message += 'Camera permission denied';
-        break;
-      case 'photo_access_denied':
-        message += 'Photo library permission denied';
-        break;
-      default:
-        message += error.message ?? 'Unknown error occurred';
-    }
-    setState(() {
-      _result = message;
-    });
-  }
 
   Future<void> _pickImage(ImageSource source) async {
     try {
@@ -75,12 +54,17 @@ class _CurrencyDetectionScreenState extends State<CurrencyDetectionScreen> {
       );
 
       if (image != null) {
-        final bytes = await image.readAsBytes();
+        Uint8List bytes;
+        if (kIsWeb) {
+          bytes = await image.readAsBytes();
+        } else {
+          bytes = await io.File(image.path).readAsBytes();
+        }
+
         setState(() {
           _selectedImageBytes = bytes;
           _imageSelected = true;
           _result = "Image selected. Click Process to analyze.";
-          _originalImageBase64 = base64Encode(bytes);
         });
       }
     } catch (e) {
@@ -93,7 +77,7 @@ class _CurrencyDetectionScreenState extends State<CurrencyDetectionScreen> {
   }
 
   Future<void> _processImage() async {
-    if (!_imageSelected) {
+    if (!_imageSelected || _selectedImageBytes == null) {
       setState(() {
         _result = "Please select or capture an image first";
       });
@@ -127,9 +111,6 @@ Confidence: ${(jsonResponse['authenticity']['confidence'] * 100).toStringAsFixed
 Denomination: ${jsonResponse['denomination']['prediction']}
 Denomination Confidence: ${(jsonResponse['denomination']['confidence'] * 100).toStringAsFixed(2)}%
 ''';
-            if (jsonResponse['edge_image'] != null) {
-              _edgeImageBase64 = jsonResponse['edge_image'];
-            }
           });
         } else {
           setState(() {
