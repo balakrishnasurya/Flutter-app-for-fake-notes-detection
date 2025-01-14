@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:universal_html/html.dart' as html;
 import 'package:http_parser/http_parser.dart';
 import 'dart:typed_data';
+import 'package:flutter/services.dart';
 
 const String flaskServerUrl = 'https://goldfish-app-ils97.ondigitalocean.app';
 
@@ -47,9 +48,44 @@ class _CurrencyDetectionScreenState extends State<CurrencyDetectionScreen> {
   Uint8List? _selectedImageBytes; // To store the selected/captured image
   bool _imageSelected = false; // To track if an image is selected/captured
 
+  void _handlePlatformChannelError(PlatformException error) {
+    String message = 'Error: ';
+    switch (error.code) {
+      case 'camera_access_denied':
+        message += 'Camera permission denied';
+        break;
+      case 'photo_access_denied':
+        message += 'Photo library permission denied';
+        break;
+      default:
+        message += error.message ?? 'Unknown error occurred';
+    }
+    setState(() {
+      _result = message;
+    });
+  }
+
   Future<void> _pickImage(ImageSource source) async {
     try {
-      final XFile? image = await _picker.pickImage(source: source);
+      // Request camera permission if needed
+      if (source == ImageSource.camera) {
+        if (kIsWeb) {
+          // Web-specific camera handling
+          final html.MediaStream stream = await html
+              .window.navigator.mediaDevices!
+              .getUserMedia({'video': true});
+          // Handle stream
+          stream.getTracks().forEach((track) => track.stop());
+        }
+      }
+
+      final XFile? image = await _picker.pickImage(
+        source: source,
+        imageQuality: 85, // Optimize image size
+        maxWidth: 1920, // Limit max dimensions
+        maxHeight: 1080,
+      );
+
       if (image != null) {
         final bytes = await image.readAsBytes();
         setState(() {
@@ -57,12 +93,13 @@ class _CurrencyDetectionScreenState extends State<CurrencyDetectionScreen> {
           _imageSelected = true;
           _result = "Image selected. Click Process to analyze.";
           _originalImageBase64 = base64Encode(bytes);
-          _edgeImageBase64 = ''; // Clear previous edge image
         });
       }
+    } on PlatformException catch (e) {
+      _handlePlatformChannelError(e);
     } catch (e) {
       setState(() {
-        _result = "Error selecting image: $e";
+        _result = "Error: $e";
       });
     }
   }
